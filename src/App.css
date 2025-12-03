@@ -1,0 +1,27 @@
+/* StreamingLogin.css */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Définition des trois familles de police */
+:root {
+  --font-primary: 'Montserrat', 'Segoe UI', sans-serif;
+  --font-secondary: 'Open Sans', 'Roboto', sans-serif;
+  --font-accent: 'Poppins', 'Segoe UI', sans-serif;
+  
+  /* Palette de couleurs inspirée de l'image Red Stars Stream Schedule */
+  --color-primary: #FF2E2E;           /* Rouge principal */
+  --color-primary-dark: #CC0000;      /* Rouge foncé */
+  --color-primary-light: #FF6B6B;     /* Rouge clair */
+  --color-secondary: #1A1A2E;         /* Noir bleuté */
+  --color-secondary-dark: #0F0F1A;    /* Noir profond */
+  --color-accent: #FFD700;            /* Or/jaune */
+  --color-accent-light: #FFF9C4;      /* Jaune clair */
+  --color-text: #FFFFFF;              /* Blanc */
+  --color-text-secondary: #B8B8D1;    /* Gris clair */
+  --color-border: #2D2D4D;            /* Bordure sombre */
+  --color-input-bg: rgba(26, 26, 46, 0.9); /* Fond des inputs */
+}
+
