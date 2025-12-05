@@ -6,6 +6,14 @@
   position: relative;
   overflow: hidden;
 }
+.streaming-login-container {
+  display: flex;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0A0A14 0%, #1A1A2E 100%);
+  color: var(--color-text);
+  position: relative;
+  overflow: hidden;
+}
 
 /* Effet d'étoiles rouges en arrière-plan */
 .login-background {

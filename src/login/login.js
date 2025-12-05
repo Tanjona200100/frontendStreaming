@@ -1,67 +1,58 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from "react-router-dom";
 import './login.css';
 
 const StreamingLogin = () => {
+  const navigate = useNavigate();
+
+  const MAX_ATTEMPTS = 5;
+  const BLOCK_TIME = 15 * 60; // 15 minutes en secondes
+  const RETRY_DELAY = 1000;
+  const MAX_RETRY = 5;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
-
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const [isBlocked, setIsBlocked] = useState(false);
   const [timer, setTimer] = useState(0);
 
-  const MAX_RETRIES = 5;
-  const RETRY_DELAY = 1000;
-  const BLOCK_DURATION = 15 * 60; // 15 minutes
-
-  /* --------------------------
-     Charger Remember Me + blocage
-  -------------------------- */
+  // ------ RESTAURATION DU BLOCAGE ------
   useEffect(() => {
-    const savedRemember = localStorage.getItem('rememberMe') === 'true';
-    if (savedRemember) {
-      setRememberMe(true);
-      const savedEmail = localStorage.getItem('savedEmail');
-      if (savedEmail) setEmail(savedEmail);
-    }
-
-    const blockedUntil = localStorage.getItem('loginBlockedUntil');
+    const blockedUntil = localStorage.getItem("blockedUntil");
     if (blockedUntil) {
-      const now = Date.now();
-      const remaining = Math.floor((blockedUntil - now) / 1000);
+      const remaining = Math.floor((blockedUntil - Date.now()) / 1000);
       if (remaining > 0) {
         setIsBlocked(true);
         setTimer(remaining);
       } else {
-        localStorage.removeItem('loginBlockedUntil');
+        localStorage.removeItem("blockedUntil");
+        localStorage.removeItem("loginAttempts");
       }
     }
   }, []);
 
-  /* --------------------------
-     Timer du blocage
-  -------------------------- */
+  // ------ TIMER ------
   useEffect(() => {
     let interval;
     if (isBlocked && timer > 0) {
-      interval = setInterval(() => {
-        setTimer(prev => prev - 1);
-      }, 1000);
+      interval = setInterval(() => setTimer(t => t - 1), 1000);
     } else if (timer === 0 && isBlocked) {
       setIsBlocked(false);
-      setError('');
-      localStorage.removeItem('loginBlockedUntil');
+      localStorage.removeItem("blockedUntil");
+      localStorage.removeItem("loginAttempts");
     }
     return () => clearInterval(interval);
   }, [isBlocked, timer]);
 
-  /* --------------------------
-     Soumission du formulaire
-  -------------------------- */
+  // ------ FORMAT TIMER ------
+  const formatTime = (sec) =>
+    `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`;
+
+  // ------ LOGIN ------
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isBlocked) return;
@@ -71,95 +62,76 @@ const StreamingLogin = () => {
     setIsLoading(true);
 
     if (!email.trim() || !password.trim()) {
-      setError('Veuillez remplir tous les champs');
+      setError("Veuillez remplir tous les champs");
       setIsLoading(false);
       return;
     }
 
-    if (rememberMe) {
-      localStorage.setItem('rememberMe', 'true');
-      localStorage.setItem('savedEmail', email);
-    } else {
-      localStorage.removeItem('rememberMe');
-      localStorage.removeItem('savedEmail');
-    }
+    let attempts = Number(localStorage.getItem("loginAttempts") || 0);
+    let retry = 0;
 
-    let attempt = 0;
-
-    const attemptLogin = async () => {
-      attempt++;
+    const sendLogin = async () => {
+      retry++;
       try {
-        const API_URL = 'http://192.168.2.161:5000/api/auth/login';
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.trim(), password, remember: rememberMe }),
+        const response = await fetch("http://192.168.2.161:5000/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password, remember: rememberMe }),
         });
+
+        if (!response.ok) {
+          if (response.status === 429 && retry < MAX_RETRY) {
+            setTimeout(sendLogin, RETRY_DELAY);
+            return;
+          }
+          if (response.status === 404) throw new Error("API introuvable");
+          throw new Error(`HTTP ${response.status}`);
+        }
 
         const text = await response.text();
         let data = {};
         try { data = JSON.parse(text); } catch {}
 
-        if (!response.ok) {
-          if (response.status === 401) throw new Error("Identifiants invalides");
-          if (response.status === 429) throw new Error("429 Too Many Requests");
-          throw new Error(`${response.status} ${text}`);
-        }
+        // ----- SUCCÈS -----
+        localStorage.setItem("authToken", data.token);
+        if (rememberMe) localStorage.setItem("rememberMe", "true");
+        if (data.user) localStorage.setItem("user", JSON.stringify(data.user));
 
-        setSuccess('Connexion réussie !');
+        localStorage.removeItem("loginAttempts");
+        localStorage.removeItem("blockedUntil");
 
-        // Sauvegarder token et user
-        if (data.token) localStorage.setItem('authToken', data.token);
-        if (data.user) localStorage.setItem('user', JSON.stringify(data.user));
-
-        // Redirection vers page d'accueil après 1,5s
-        // setTimeout(() => {
-        //   navigate('/home'); // ← page d'accueil
-        // }, 1500);
+        setSuccess("Connexion réussie !");
+        navigate("/home");
+        setIsLoading(false);
 
       } catch (err) {
-        if (err.message.includes("429") && attempt < MAX_RETRIES) {
-          console.warn(`Tentative ${attempt} échouée, nouvelle tentative dans 1s...`);
-          setTimeout(attemptLogin, RETRY_DELAY);
-          return;
+        attempts++;
+        localStorage.setItem("loginAttempts", attempts);
+
+        if (attempts >= MAX_ATTEMPTS) {
+          const blockEnd = Date.now() + BLOCK_TIME * 1000;
+          localStorage.setItem("blockedUntil", blockEnd);
+          setIsBlocked(true);
+          setTimer(BLOCK_TIME);
+          setError("Trop de tentatives. Vous êtes bloqué 15 minutes.");
+        } else if (err instanceof TypeError) {
+          setError("Impossible de joindre le serveur. Vérifiez votre connexion.");
+        } else if (err.message === "API introuvable") {
+          setError("API introuvable.");
+        } else {
+          setError("Identifiants invalides.");
         }
 
-        if (err.message.includes("429") && attempt >= MAX_RETRIES) {
-          setError("Trop de tentatives. Réessayez dans 15 minutes.");
-          setIsBlocked(true);
-          setTimer(BLOCK_DURATION);
-          localStorage.setItem("loginBlockedUntil", Date.now() + BLOCK_DURATION * 1000);
-        } else if (err.message.toLowerCase().includes("identifiants")) {
-          setError("Identifiants invalides. Vérifiez vos informations.");
-        } else if (err instanceof TypeError && err.message === "Failed to fetch") {
-          setError("Impossible de contacter le serveur.");
-        } else if (err.message.includes("404")) {
-          setError("API introuvable. Vérifiez l’URL.");
-        } else {
-          setError(err.message || "Erreur inconnue.");
-        }
-      } finally {
         setIsLoading(false);
       }
     };
 
-    attemptLogin();
+    sendLogin();
   };
 
-  /* --------------------------
-     Format du timer
-  -------------------------- */
-  const formatTime = (sec) => {
-    const m = Math.floor(sec / 60).toString().padStart(2, '0');
-    const s = (sec % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-  };
-
-  /* --------------------------
-     JSX
-  -------------------------- */
   return (
     <div className="streaming-login-container">
+
       <div className="login-background">
         <div className="video-overlay"></div>
       </div>
@@ -167,11 +139,14 @@ const StreamingLogin = () => {
       <div className="login-center-wrapper">
         <div className="login-content">
           <div className="login-card">
-            <h2>Streaming video</h2>
+
+            <h2>Streaming vidéo</h2>
 
             {success && <div className="success-message">{success}</div>}
             {error && <div className="error-message">{error}</div>}
-            {isBlocked && <div className="error-message">Réessayez dans {formatTime(timer)}</div>}
+            {isBlocked && (
+              <div className="error-message">Réessayez dans {formatTime(timer)}</div>
+            )}
 
             <form onSubmit={handleSubmit} className="login-form">
 
@@ -181,7 +156,6 @@ const StreamingLogin = () => {
                   type="text"
                   value={email}
                   onChange={(e) => { setEmail(e.target.value); setError(''); }}
-                  placeholder="Entrez votre email"
                   disabled={isLoading || isBlocked}
                 />
               </div>
@@ -192,32 +166,25 @@ const StreamingLogin = () => {
                   type="password"
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                  placeholder="Entrez votre mot de passe"
                   disabled={isLoading || isBlocked}
                 />
               </div>
 
               <div className="form-options">
-                <div className="remember-me">
+                <div>
                   <input
                     type="checkbox"
-                    id="remember"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
                     disabled={isLoading || isBlocked}
                   />
-                  <label htmlFor="remember">Se souvenir de moi</label>
+                  <label>Se souvenir de moi</label>
                 </div>
-
                 <a href="#" className="forgot-password">Mot de passe oublié ?</a>
               </div>
 
-              <button
-                type="submit"
-                className="login-button"
-                disabled={isLoading || isBlocked}
-              >
-                {isLoading ? 'CONNEXION...' : 'SE CONNECTER'}
+              <button className="login-button" disabled={isLoading || isBlocked}>
+                {isLoading ? "CONNEXION..." : "SE CONNECTER"}
               </button>
 
             </form>
