@@ -1,8 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Pause, Volume2, Settings, Maximize, ThumbsUp, ThumbsDown, User, Bell, LogOut, Check, Star, MessageSquare, X } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Play, Pause, Volume2, Settings, Maximize, User, Bell, LogOut, Check, Star, MessageSquare, X, AlertCircle } from 'lucide-react';
 import './home.css';
 
 export default function YouTubeInterface() {
+  const navigate = useNavigate();
+  
+  // États d'authentification
+  const [userData, setUserData] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
+  
+  // États des vidéos
   const [selectedVideo, setSelectedVideo] = useState(0);
   const [videoStates, setVideoStates] = useState(Array(4).fill({ isPlaying: false, progress: 27 }));
   const videoRefs = useRef(Array(4).fill(null));
@@ -10,12 +19,122 @@ export default function YouTubeInterface() {
   // Tableau pour stocker les vidéos sélectionnées (4 max)
   const [selectedVideos, setSelectedVideos] = useState([0, 1, 2, 3]);
   
-  // État pour les notes et commentaires
-  const [showNoteForm, setShowNoteForm] = useState(null); // null ou index de la vidéo
-  const [videoNotes, setVideoNotes] = useState(
-    Array(4).fill({ rating: 0, comment: '', isSubmitted: false })
-  );
+  // État pour les notes et commentaires (maintenant basé sur l'ID de la vidéo)
+  const [showNoteForm, setShowNoteForm] = useState(null);
+  const [videoNotes, setVideoNotes] = useState({});
 
+  // État pour l'affichage du menu déroulant des vidéos
+  const [showVideoDropdown, setShowVideoDropdown] = useState(false);
+
+  // Vérifier l'authentification au chargement
+  useEffect(() => {
+    const checkAuth = () => {
+      const token = localStorage.getItem('authToken');
+      const user = localStorage.getItem('user');
+      const isLoggedIn = localStorage.getItem('isLoggedIn');
+      
+      console.log("Vérification auth:", { token, user, isLoggedIn });
+      
+      if (token && user && isLoggedIn === 'true') {
+        try {
+          const parsedUser = JSON.parse(user);
+          setUserData(parsedUser);
+          setIsAuthenticated(true);
+          console.log("Utilisateur connecté:", parsedUser);
+        } catch (error) {
+          console.error("Erreur parsing user data:", error);
+          handleLogout();
+        }
+      } else {
+        console.log("Non authentifié, redirection vers login");
+        navigate('/', { replace: true });
+      }
+      
+      setLoading(false);
+    };
+
+    checkAuth();
+  }, [navigate]);
+
+  // Charger les notes sauvegardées au démarrage
+  useEffect(() => {
+    const savedNotes = localStorage.getItem('videoNotes');
+    if (savedNotes) {
+      try {
+        setVideoNotes(JSON.parse(savedNotes));
+      } catch (error) {
+        console.error("Erreur chargement notes:", error);
+      }
+    }
+  }, []);
+
+  // Rediriger si non authentifié
+  useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      navigate('/', { replace: true });
+    }
+  }, [loading, isAuthenticated, navigate]);
+
+  // Fonction de déconnexion
+  const handleLogout = async () => {
+    console.log("Déconnexion...");
+    
+    try {
+      const token = localStorage.getItem('authToken');
+      
+      if (token) {
+        const response = await fetch('http://192.168.2.161:5000/api/auth/logout', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+        });
+
+        if (!response.ok) {
+          console.warn("Échec de la déconnexion côté serveur, mais nettoyage client effectué");
+        } else {
+          console.log("Déconnexion réussie côté serveur");
+        }
+      }
+    } catch (error) {
+      console.error("Erreur lors de la déconnexion:", error);
+    } finally {
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('user');
+      localStorage.removeItem('rememberMe');
+      localStorage.removeItem('savedEmail');
+      localStorage.removeItem('isLoggedIn');
+      
+      setIsAuthenticated(false);
+      setUserData(null);
+      navigate('/', { replace: true });
+    }
+  };
+
+  // Fonction pour vérifier les notifications
+  const checkNotifications = () => {
+    if (!isAuthenticated) return;
+    
+    console.log("Vérification des notifications...");
+    alert("Vous avez 3 nouvelles notifications (simulé)");
+  };
+
+  // Fonction pour sauvegarder les notes
+  const saveNotesToStorage = () => {
+    try {
+      localStorage.setItem('videoNotes', JSON.stringify(videoNotes));
+    } catch (error) {
+      console.error("Erreur sauvegarde notes:", error);
+    }
+  };
+
+  // Fonction pour récupérer la note d'une vidéo spécifique
+  const getVideoNote = (videoId) => {
+    return videoNotes[videoId] || { rating: 0, comment: '', isSubmitted: false };
+  };
+
+  // Données des vidéos
   const allVideos = [
     { 
       id: 0,
@@ -75,38 +194,12 @@ export default function YouTubeInterface() {
     }
   ];
 
-  const relatedVideos = [
-    { title: "LOST CIVILIZATIONS", thumbnail: "ancient-ruins-1" },
-    { title: "ARCHAEOLOGICAL DISCOVERIES", thumbnail: "ancient-ruins-2" },
-    { title: "MYSTERY OF THE PYRAMIDS", thumbnail: "pyramids-1" },
-    { title: "MYSTERY OF THE PYRAMIDS", thumbnail: "pyramids-2" }
-  ];
-
-  const trendingVideos = [
-    { title: "HAMADRENAS", thumbnail: "trending-1" },
-    { title: "EXPLORING ANCIENT RUINS", thumbnail: "trending-2" },
-    { title: "EXPLORING ANCIENT RUINS", thumbnail: "trending-3" },
-    { title: "NIGHT EXPLORATION", thumbnail: "trending-4" },
-    { title: "ANCIENT SITES", thumbnail: "trending-5" },
-    { title: "HISTORICAL PLACES", thumbnail: "trending-6" }
-  ];
-
-  const comments = [
-    { name: "User 1", text: "His learn ndley yand bve anather", subtext: "Lesson ared13 Me puger diit" },
-    { name: "User 2", text: "Rave inally at hasleat", subtext: "Sd lerle us" }
-  ];
-
-  // Fonction pour obtenir la disposition
-  const getVideoLayout = () => {
-    const count = selectedVideos.filter(id => id !== null).length;
-    return count;
-  };
-
   // Obtenir les vidéos affichées
   const displayedVideos = selectedVideos.map(id => 
     id !== null ? allVideos.find(video => video.id === id) || null : null
   );
 
+  // Fonctions de gestion des vidéos
   const toggleVideoPlayback = (index) => {
     const video = videoRefs.current[index];
     if (!video) return;
@@ -166,50 +259,49 @@ export default function YouTubeInterface() {
   };
 
   // Fonctions pour gérer les notes et commentaires
-  const handleNoteButtonClick = (index) => {
-    setShowNoteForm(showNoteForm === index ? null : index);
+  const handleNoteButtonClick = (videoId) => {
+    setShowNoteForm(showNoteForm === videoId ? null : videoId);
   };
 
-  const handleRatingChange = (index, rating) => {
-    setVideoNotes(prev => {
-      const newNotes = [...prev];
-      newNotes[index] = {
-        ...newNotes[index],
+  const handleRatingChange = (videoId, rating) => {
+    setVideoNotes(prev => ({
+      ...prev,
+      [videoId]: {
+        ...prev[videoId],
         rating: rating
-      };
-      return newNotes;
-    });
+      }
+    }));
   };
 
-  const handleCommentChange = (index, comment) => {
-    setVideoNotes(prev => {
-      const newNotes = [...prev];
-      newNotes[index] = {
-        ...newNotes[index],
+  const handleCommentChange = (videoId, comment) => {
+    setVideoNotes(prev => ({
+      ...prev,
+      [videoId]: {
+        ...prev[videoId],
         comment: comment
-      };
-      return newNotes;
-    });
+      }
+    }));
   };
 
-  const submitNote = (index) => {
-    if (videoNotes[index].rating > 0) {
-      setVideoNotes(prev => {
-        const newNotes = [...prev];
-        newNotes[index] = {
-          ...newNotes[index],
-          isSubmitted: true
-        };
-        return newNotes;
-      });
+  const submitNote = (videoId) => {
+    if (videoNotes[videoId]?.rating > 0) {
+      setVideoNotes(prev => ({
+        ...prev,
+        [videoId]: {
+          ...prev[videoId],
+          isSubmitted: true,
+          submittedAt: new Date().toISOString()
+        }
+      }));
       setShowNoteForm(null);
+      saveNotesToStorage();
     } else {
       alert("Veuillez donner une note avant de soumettre.");
     }
   };
 
   const getVideoGridClasses = () => {
-    const count = getVideoLayout();
+    const count = selectedVideos.filter(id => id !== null).length;
     let classes = 'video-grid';
     
     switch(count) {
@@ -232,13 +324,51 @@ export default function YouTubeInterface() {
     return classes;
   };
 
-  const handleLogout = () => {
-    console.log("Déconnexion...");
+  const handleNotifications = () => {
+    checkNotifications();
   };
 
-  const handleNotifications = () => {
-    console.log("Notifications...");
-  };
+  // Fonction pour fermer le dropdown si on clique en dehors
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const dropdown = document.querySelector('.selector-group');
+      if (dropdown && !dropdown.contains(event.target)) {
+        setShowVideoDropdown(false);
+      }
+    };
+
+    if (showVideoDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showVideoDropdown]);
+
+  // Afficher le chargement
+  if (loading) {
+    return (
+      <div className="loading-container">
+        <div className="loading-spinner"></div>
+        <p>Chargement...</p>
+      </div>
+    );
+  }
+
+  // Afficher l'erreur si non authentifié
+  if (!isAuthenticated) {
+    return (
+      <div className="auth-error-container">
+        <AlertCircle size={48} />
+        <h3>Accès non autorisé</h3>
+        <p>Vous devez être connecté pour accéder à cette page</p>
+        <button onClick={() => navigate('/')} className="auth-error-button">
+          Retour à la connexion
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="home-container">
@@ -251,7 +381,11 @@ export default function YouTubeInterface() {
         </div>
         
         <div className="video-selectors">
-          <div className="selector-group simple-selector">
+          <div 
+            className="selector-group simple-selector"
+            onMouseEnter={() => setShowVideoDropdown(true)}
+            onMouseLeave={() => setShowVideoDropdown(false)}
+          >
             <label className="selector-label">Sélection des vidéos:</label>
             <div className="dropdown-container">
               <div className="dropdown-header">
@@ -260,49 +394,63 @@ export default function YouTubeInterface() {
                 </span>
               </div>
               
-              <div className="dropdown-content">
-                {allVideos.map((video) => (
-                  <div 
-                    key={video.id} 
-                    className="dropdown-item"
-                    onClick={() => toggleVideoSelection(video.id)}
-                  >
-                    <div className="item-checkbox">
-                      <input
-                        type="checkbox"
-                        id={`video-${video.id}`}
-                        checked={selectedVideos.includes(video.id)}
-                        onChange={() => {}}
-                        className="checkbox-input"
-                      />
-                      <label htmlFor={`video-${video.id}`} className="checkbox-label">
-                        {selectedVideos.includes(video.id) && (
-                          <Check className="check-icon" />
-                        )}
-                      </label>
+              {/* Menu déroulant conditionnel */}
+              {showVideoDropdown && (
+                <div className="dropdown-content">
+                  {allVideos.map((video) => (
+                    <div 
+                      key={video.id} 
+                      className="dropdown-item"
+                      onClick={() => toggleVideoSelection(video.id)}
+                    >
+                      <div className="item-checkbox">
+                        <input
+                          type="checkbox"
+                          id={`video-${video.id}`}
+                          checked={selectedVideos.includes(video.id)}
+                          onChange={() => {}}
+                          className="checkbox-input"
+                        />
+                        <label htmlFor={`video-${video.id}`} className="checkbox-label">
+                          {selectedVideos.includes(video.id) && (
+                            <Check className="check-icon" />
+                          )}
+                        </label>
+                      </div>
+                      <span className="item-title">{video.title}</span>
+                      <span className="item-viewers">({video.viewers})</span>
                     </div>
-                    <span className="item-title">{video.title}</span>
-                    <span className="item-viewers">({video.viewers})</span>
+                  ))}
+                  
+                  <div className="selection-info">
+                    <small>Sélectionnez jusqu'à 4 vidéos maximum</small>
                   </div>
-                ))}
-              </div>
-              
-              <div className="selection-info">
-                <small>Sélectionnez jusqu'à 4 vidéos maximum</small>
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         <div className="header-right">
+          <div className="user-info">
+            {userData && (
+              <span className="welcome-message">
+                Bienvenue, {userData.name || userData.email || 'Utilisateur'}
+              </span>
+            )}
+          </div>
+          
           <button onClick={handleLogout} className="header-button logout-button">
             <LogOut className="header-icon" />
             <span>Déconnexion</span>
           </button>
+          
           <button onClick={handleNotifications} className="header-button notifications-button">
             <Bell className="header-icon" />
             <span>Notifications</span>
+            <span className="notification-badge">3</span>
           </button>
+          
           <div className="user-profile">
             <User className="profile-icon" />
           </div>
@@ -313,14 +461,13 @@ export default function YouTubeInterface() {
       <div className="main-content">
         {/* Video Player Section */}
         <div className="video-section">
-          {/* Video Player */}
           <div className="video-player">
             <div className={getVideoGridClasses()}>
               {displayedVideos.map((video, index) => (
                 video !== null ? (
                   <div 
                     key={index} 
-                    className={`video-grid-item ${getVideoLayout() === 1 ? 'fullscreen-video' : ''}`}
+                    className={`video-grid-item ${getVideoGridClasses().includes('single') ? 'fullscreen-video' : ''}`}
                     style={{ 
                       border: selectedVideo === index ? '3px solid var(--color-accent)' : '2px solid transparent' 
                     }}
@@ -344,7 +491,7 @@ export default function YouTubeInterface() {
                           className="note-button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleNoteButtonClick(index);
+                            handleNoteButtonClick(video.id);
                           }}
                         >
                           <Star className="note-icon" />
@@ -392,21 +539,21 @@ export default function YouTubeInterface() {
                     </div>
                     <div className="video-info">
                       <h3 className="live-video-title">{video.title}</h3>
-                      {videoNotes[index]?.isSubmitted && (
+                      {getVideoNote(video.id)?.isSubmitted && (
                         <div className="video-rating-display">
                           <div className="rating-stars">
                             {[1, 2, 3, 4, 5].map((star) => (
                               <Star 
                                 key={star}
-                                className={`star-icon ${star <= videoNotes[index].rating ? 'filled' : ''}`}
+                                className={`star-icon ${star <= getVideoNote(video.id).rating ? 'filled' : ''}`}
                                 size={14}
                               />
                             ))}
                           </div>
-                          {videoNotes[index].comment && (
+                          {getVideoNote(video.id).comment && (
                             <div className="video-comment-preview">
                               <MessageSquare size={12} />
-                              <span>{videoNotes[index].comment.substring(0, 20)}...</span>
+                              <span>{getVideoNote(video.id).comment.substring(0, 20)}...</span>
                             </div>
                           )}
                         </div>
@@ -423,10 +570,10 @@ export default function YouTubeInterface() {
         <div className="notes-sidebar">
           <h3 className="sidebar-title">NOTES ET COMMENTAIRES</h3>
           
-          {showNoteForm !== null && displayedVideos[showNoteForm] && (
+          {showNoteForm !== null && allVideos.find(v => v.id === showNoteForm) && (
             <div className="note-form-container">
               <div className="note-form-header">
-                <h4>Ajouter une note pour : {displayedVideos[showNoteForm].title}</h4>
+                <h4>Ajouter une note pour : {allVideos.find(v => v.id === showNoteForm).title}</h4>
                 <button 
                   className="close-note-form"
                   onClick={() => setShowNoteForm(null)}
@@ -441,7 +588,7 @@ export default function YouTubeInterface() {
                   {[1, 2, 3, 4, 5].map((star) => (
                     <button
                       key={star}
-                      className={`star-button ${star <= videoNotes[showNoteForm].rating ? 'active' : ''}`}
+                      className={`star-button ${star <= (getVideoNote(showNoteForm).rating || 0) ? 'active' : ''}`}
                       onClick={() => handleRatingChange(showNoteForm, star)}
                     >
                       <Star size={28} />
@@ -449,7 +596,7 @@ export default function YouTubeInterface() {
                   ))}
                 </div>
                 <div className="rating-value">
-                  {videoNotes[showNoteForm].rating}/5
+                  {getVideoNote(showNoteForm).rating}/5
                 </div>
               </div>
               
@@ -457,7 +604,7 @@ export default function YouTubeInterface() {
                 <label htmlFor={`comment-${showNoteForm}`}>Commentaire :</label>
                 <textarea
                   id={`comment-${showNoteForm}`}
-                  value={videoNotes[showNoteForm].comment}
+                  value={getVideoNote(showNoteForm).comment || ''}
                   onChange={(e) => handleCommentChange(showNoteForm, e.target.value)}
                   placeholder="Ajoutez un commentaire (optionnel)"
                   rows="4"
@@ -475,32 +622,37 @@ export default function YouTubeInterface() {
           
           <div className="notes-summary">
             <h4>Résumé des notes :</h4>
-            {displayedVideos.map((video, index) => (
-              video !== null && videoNotes[index]?.isSubmitted ? (
-                <div key={index} className="note-summary-item">
-                  <div className="note-video-info">
-                    <div className="note-video-title">{video.title}</div>
-                    <div className="note-rating">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <Star 
-                          key={star}
-                          className={`star-summary ${star <= videoNotes[index].rating ? 'filled' : ''}`}
-                          size={16}
-                        />
-                      ))}
-                      <span className="rating-text">{videoNotes[index].rating}/5</span>
+            {Object.entries(videoNotes)
+              .filter(([videoId, note]) => note.isSubmitted)
+              .map(([videoId, note]) => {
+                const video = allVideos.find(v => v.id === parseInt(videoId));
+                if (!video) return null;
+                
+                return (
+                  <div key={videoId} className="note-summary-item">
+                    <div className="note-video-info">
+                      <div className="note-video-title">{video.title}</div>
+                      <div className="note-rating">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star 
+                            key={star}
+                            className={`star-summary ${star <= note.rating ? 'filled' : ''}`}
+                            size={16}
+                          />
+                        ))}
+                        <span className="rating-text">{note.rating}/5</span>
+                      </div>
                     </div>
+                    {note.comment && (
+                      <div className="note-comment">
+                        <MessageSquare size={14} />
+                        <p>{note.comment}</p>
+                      </div>
+                    )}
                   </div>
-                  {videoNotes[index].comment && (
-                    <div className="note-comment">
-                      <MessageSquare size={14} />
-                      <p>{videoNotes[index].comment}</p>
-                    </div>
-                  )}
-                </div>
-              ) : null
-            ))}
-            {!displayedVideos.some((video, index) => video !== null && videoNotes[index]?.isSubmitted) && (
+                );
+              })}
+            {Object.keys(videoNotes).filter(videoId => videoNotes[videoId]?.isSubmitted).length === 0 && (
               <div className="no-notes-message">
                 <Star size={40} className="no-notes-icon" />
                 <p>Aucune note soumise pour le moment</p>

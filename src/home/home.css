@@ -1023,3 +1023,17 @@
     padding: 4px 8px;
   }
 }
+/* Dans home.css */
+.dropdown-container {
+  position: relative;
+}
+
+.dropdown-content {
+  display: none;
+  position: absolute;
+  /* ... vos autres styles existants ... */
+}
+
+.selector-group:hover .dropdown-content {
+  display: block;
+}

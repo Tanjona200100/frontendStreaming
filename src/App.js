@@ -1,19 +1,27 @@
 // src/App.js
 import './App.css';
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { useAuth } from "./hooks/useAuth";
 import StreamingLogin from './login/login';
 import HomePage from './home/home';
 import ProtectedRoute from "./protection/ProtectedRoute";
-import Socket from "./socket"
+import Socket from "./socket";
 
 function App() {
+  const { isAuthenticated } = useAuth();
+
   return (
     <Router>
       <Routes>
-    
-       
-        <Route path="/" element={<StreamingLogin />} />
+        {/* Redirection si déjà authentifié */}
+        <Route 
+          path="/" 
+          element={
+            isAuthenticated ? <Navigate to="/home" replace /> : <StreamingLogin />
+          } 
+        />
 
+        {/* Routes protégées */}
         <Route
           path="/home"
           element={
@@ -22,14 +30,17 @@ function App() {
             </ProtectedRoute>
           }
         />
+        
         <Route
           path="/socket"
           element={
             <ProtectedRoute>
-              < Socket />
+              <Socket />
             </ProtectedRoute>
           }
-        /> 
+        />
+
+        
       
       </Routes>
     </Router>
