@@ -26,6 +26,9 @@ export default function YouTubeInterface() {
   // État pour l'affichage du menu déroulant des vidéos
   const [showVideoDropdown, setShowVideoDropdown] = useState(false);
 
+  // État pour le menu déroulant du profil
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+
   // Vérifier l'authentification au chargement
   useEffect(() => {
     const checkAuth = () => {
@@ -54,6 +57,26 @@ export default function YouTubeInterface() {
     };
 
     checkAuth();
+    
+    // Gestionnaire pour synchroniser les onglets
+    const handleStorageChange = (e) => {
+      if (e.key === 'authToken' || e.key === 'isLoggedIn') {
+        const token = localStorage.getItem('authToken');
+        const isLoggedIn = localStorage.getItem('isLoggedIn');
+        
+        if (!token || isLoggedIn !== 'true') {
+          setIsAuthenticated(false);
+          setUserData(null);
+          navigate('/', { replace: true });
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
   }, [navigate]);
 
   // Charger les notes sauvegardées au démarrage
@@ -75,41 +98,106 @@ export default function YouTubeInterface() {
     }
   }, [loading, isAuthenticated, navigate]);
 
-  // Fonction de déconnexion
+  // Fonction pour fermer les dropdowns si on clique en dehors
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      // Fermer le dropdown vidéo
+      const videoDropdown = document.querySelector('.selector-group');
+      if (videoDropdown && !videoDropdown.contains(event.target)) {
+        setShowVideoDropdown(false);
+      }
+      
+      // Fermer le dropdown profil
+      const profileElement = document.querySelector('.user-profile');
+      const profileDropdown = document.querySelector('.profile-dropdown');
+      if (
+        profileElement && 
+        profileDropdown && 
+        !profileElement.contains(event.target) && 
+        !profileDropdown.contains(event.target)
+      ) {
+        setShowProfileDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Fonction de déconnexion CORRIGÉE
   const handleLogout = async () => {
     console.log("Déconnexion...");
     
     try {
       const token = localStorage.getItem('authToken');
+      const apiUrl = process.env.REACT_APP_API_URL;
       
-      if (token) {
-        const response = await fetch('http://192.168.2.161:5000/api/auth/logout', {
+      if (token && apiUrl) {
+        // Tentative de déconnexion côté serveur
+        await fetch(`${apiUrl}/api/auth/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
+        }).catch((error) => {
+          console.warn("Déconnexion API échouée, nettoyage local:", error);
         });
-
-        if (!response.ok) {
-          console.warn("Échec de la déconnexion côté serveur, mais nettoyage client effectué");
-        } else {
-          console.log("Déconnexion réussie côté serveur");
-        }
       }
     } catch (error) {
       console.error("Erreur lors de la déconnexion:", error);
-    } finally {
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('user');
-      localStorage.removeItem('rememberMe');
-      localStorage.removeItem('savedEmail');
-      localStorage.removeItem('isLoggedIn');
-      
-      setIsAuthenticated(false);
-      setUserData(null);
-      navigate('/', { replace: true });
     }
+    
+    // Nettoyer toutes les données d'authentification
+    const keysToRemove = ['authToken', 'user', 'rememberMe', 'savedEmail', 'isLoggedIn'];
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+    
+    // Réinitialiser l'état
+    setIsAuthenticated(false);
+    setUserData(null);
+    
+    // Rediriger IMMÉDIATEMENT vers la page de login
+    window.location.href = '/';
+  };
+
+  // Fonction pour naviguer vers le profil - CORRIGÉE
+  const handleProfileClick = () => {
+    console.log("Navigation vers profil...");
+    
+    // Vérifier que l'utilisateur est toujours authentifié
+    const token = localStorage.getItem('authToken');
+    const isLoggedIn = localStorage.getItem('isLoggedIn');
+    const user = localStorage.getItem('user');
+    
+    if (!token || isLoggedIn !== 'true' || !user) {
+      console.error("Données d'authentification manquantes, redirection vers login");
+      navigate('/', { replace: true });
+      return;
+    }
+    
+    // S'assurer que les données utilisateur sont dans le state avant de naviguer
+    if (!userData) {
+      console.log("Chargement des données utilisateur...");
+      try {
+        const parsedUser = JSON.parse(user);
+        setUserData(parsedUser);
+        setIsAuthenticated(true);
+      } catch (error) {
+        console.error("Erreur parsing user:", error);
+        navigate('/', { replace: true });
+        return;
+      }
+    }
+    
+    // Fermer le dropdown
+    setShowProfileDropdown(false);
+    
+    // Naviguer vers le profil
+    console.log("Navigation vers /profil");
+    navigate('/profil');
   };
 
   // Fonction pour vérifier les notifications
@@ -328,23 +416,12 @@ export default function YouTubeInterface() {
     checkNotifications();
   };
 
-  // Fonction pour fermer le dropdown si on clique en dehors
+  // Sauvegarder automatiquement les notes quand elles changent
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      const dropdown = document.querySelector('.selector-group');
-      if (dropdown && !dropdown.contains(event.target)) {
-        setShowVideoDropdown(false);
-      }
-    };
-
-    if (showVideoDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
+    if (Object.keys(videoNotes).length > 0) {
+      saveNotesToStorage();
     }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showVideoDropdown]);
+  }, [videoNotes]);
 
   // Afficher le chargement
   if (loading) {
@@ -451,8 +528,83 @@ export default function YouTubeInterface() {
             <span className="notification-badge">3</span>
           </button>
           
-          <div className="user-profile">
-            <User className="profile-icon" />
+          <div className="profile-container">
+            <div 
+              className="user-profile"
+              onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+            >
+              {userData?.avatar ? (
+                <img 
+                  src={userData.avatar} 
+                  alt="Avatar" 
+                  className="profile-avatar-img"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextElementSibling.style.display = 'flex';
+                  }}
+                />
+              ) : (
+                <User className="profile-icon" />
+              )}
+            </div>
+            
+            {/* Menu déroulant du profil */}
+            {showProfileDropdown && (
+              <div className="profile-dropdown">
+                <div className="profile-dropdown-header">
+                  <div className="profile-info">
+                    <div className="profile-avatar">
+                      {userData?.avatar ? (
+                        <img 
+                          src={userData.avatar} 
+                          alt="Avatar" 
+                          className="profile-avatar-img"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            e.target.nextElementSibling.style.display = 'flex';
+                          }}
+                        />
+                      ) : (
+                        <User size={24} />
+                      )}
+                    </div>
+                    <div className="profile-details">
+                      <h4>{userData?.name || 'Utilisateur'}</h4>
+                      <p>{userData?.email || ''}</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="profile-dropdown-items">
+                  <div 
+                    className="profile-dropdown-item"
+                    onClick={handleProfileClick}
+                  >
+                    <User size={18} />
+                    <span>Mon Profil</span>
+                  </div>
+                  
+                  <div 
+                    className="profile-dropdown-item"
+                    onClick={handleNotifications}
+                  >
+                    <Bell size={18} />
+                    <span>Notifications</span>
+                    <span className="dropdown-notification-badge">3</span>
+                  </div>
+                  
+                  <div className="dropdown-divider"></div>
+                  
+                  <div 
+                    className="profile-dropdown-item logout-item"
+                    onClick={handleLogout}
+                  >
+                    <LogOut size={18} />
+                    <span>Déconnexion</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </header>

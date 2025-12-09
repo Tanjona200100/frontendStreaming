@@ -7,8 +7,6 @@ const StreamingLogin = () => {
 
   const MAX_ATTEMPTS = 5;
   const BLOCK_TIME = 15 * 60 * 1000; // 15 minutes en millisecondes
-  const RETRY_DELAY = 2000; // 2 secondes
-  const MAX_RETRY = 3;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -131,7 +129,8 @@ const StreamingLogin = () => {
     
     try {
       // Tentative de connexion
-      const response = await fetch("http://192.168.2.161:5000/api/auth/login", {
+      const apiUrl = process.env.REACT_APP_API_URL;
+      const response = await fetch(`${apiUrl}/api/auth/login`,  {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",

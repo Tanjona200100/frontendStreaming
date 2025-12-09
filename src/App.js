@@ -5,7 +5,7 @@ import { useAuth } from "./hooks/useAuth";
 import StreamingLogin from './login/login';
 import HomePage from './home/home';
 import ProtectedRoute from "./protection/ProtectedRoute";
-import Socket from "./socket";
+import Profil from "./profile/profil";
 
 function App() {
   const { isAuthenticated } = useAuth();
@@ -32,10 +32,10 @@ function App() {
         />
         
         <Route
-          path="/socket"
+          path="/profil"
           element={
             <ProtectedRoute>
-              <Socket />
+              <Profil />
             </ProtectedRoute>
           }
         />
